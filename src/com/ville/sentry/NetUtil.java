@@ -223,12 +223,12 @@ public class NetUtil {
         return _sb.toString();
     }
 
-    private String getBoundaryMessage(String boundary, Map params, String fileField, String fileName, String fileType) {
+    private String getBoundaryMessage(String boundary, Map<String, String> params, String fileField, String fileName, String fileType) {
         StringBuffer res = new StringBuffer("--").append(boundary).append("\r\n");
-        Iterator keys = params.keySet().iterator();
+        Iterator<String> keys = params.keySet().iterator();
         while (keys.hasNext()) {
-            String key = (String) keys.next();
-            String value = (String) params.get(key);
+            String key = keys.next();
+            String value = params.get(key);
             res.append("Content-Disposition: form-data; name=\"")
                     .append(key).append("\"\r\n").append("\r\n")
                     .append(value).append("\r\n").append("--")

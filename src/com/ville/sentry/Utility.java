@@ -1,10 +1,16 @@
 package com.ville.sentry;
 
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
+
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 
 public class Utility {
+	private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
 	public static boolean isConnected(Context context) {
         ConnectivityManager cm = (ConnectivityManager)
                 context.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -46,4 +52,40 @@ public class Utility {
         }
         return false;
     }
+    
+    /**
+     * 时间上传的时间窗口
+     * 当满足以下条件之一即为有效窗口时间： <br>
+     * 1.lastUploadDate不是当天的时间<br>
+     * 2.lastUploadDate为当天时间，同时处于下述四个时间段之一:<br>
+     *  7:00  - 9:00
+	 	11:30 - 13:00
+	 	17:00 - 19:00
+		20:30 - 22:00
+		@param last 上次的上传时间
+     * @return
+     */
+    public static boolean isValidUploadWindow(Date date){
+    	Calendar calendar = Calendar.getInstance(Locale.US);
+    	calendar.setTime(date);
+    	int hour = calendar.get(Calendar.HOUR_OF_DAY);
+    	if(hour >= 7 && hour <= 9) {
+    		return true;
+    	}else if(hour >= 11 && hour <= 13){
+    		return true;
+    	}else if (hour >= 17 && hour <= 19){
+    		return true;
+    	}else if (hour >= 20 && hour <= 22){
+    		return true;
+    	}
+    	
+    	return false;
+    }
+    
+    public static boolean isSameDay(Date d1, Date d2){
+    	String d1Str = DATE_FORMAT.format(d1);
+    	String d2Str = DATE_FORMAT.format(d2);
+    	return d1Str.equals(d2Str);
+    }
+    
 }

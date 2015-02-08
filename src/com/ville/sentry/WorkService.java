@@ -4,6 +4,13 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 
+import android.app.Service;
+import android.content.Intent;
+import android.os.AsyncTask;
+import android.os.IBinder;
+import android.text.TextUtils;
+import android.widget.Toast;
+
 import com.baidu.location.BDGeofence;
 import com.baidu.location.BDLocation;
 import com.baidu.location.BDLocationListener;
@@ -14,13 +21,6 @@ import com.ville.sentry.bean.SLocation;
 import com.ville.sentry.bean.WebResult;
 import com.ville.sentry.db.DBDao;
 import com.ville.sentry.db.DBImpl;
-
-import android.app.Service;
-import android.content.Intent;
-import android.os.AsyncTask;
-import android.os.IBinder;
-import android.text.TextUtils;
-import android.widget.Toast;
 
 public class WorkService extends Service {
 
@@ -53,12 +53,12 @@ public class WorkService extends Service {
 		//坐标类型
 		String coor = BDGeofence.COORD_TYPE_GCJ;
 		//扫描的时间间隔
-		int span=10000;
+		//int span = 10000;
 		
 		LocationClientOption option = new LocationClientOption();
 		option.setLocationMode(mode);
 		option.setCoorType(coor);
-		// setScanSpan(): 当不设此项，或者所设的整数值小于1000（ms）时，采用一次定位模式。
+		// setScanSpan(1000): 当不设此项，或者所设的整数值小于1000（ms）时，采用一次定位模式。
 		// 每调用一次requestLocation( )，定位SDK会发起一次定位。请求定位与监听结果一一对应。
 		//option.setScanSpan(span);
 		option.setIsNeedAddress(true); //是否解析为实际地址
@@ -74,8 +74,8 @@ public class WorkService extends Service {
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		// TODO Auto-generated method stub
-		Toast.makeText(this, "repeating alarm", Toast.LENGTH_SHORT).show();
-		AppLog.d(TAG, "[onStartCommand] " + new Date().toGMTString() + ", " + intent.getAction());
+//		Toast.makeText(this, "repeating alarm", Toast.LENGTH_SHORT).show();
+		AppLog.d(TAG, "[onStartCommand] " + new Date() + ", " + intent.getAction());
 		String action = intent.getAction();
 		if(ACTION_LOCATION_REQ.equals(action)){
 			mClient.start();
@@ -143,23 +143,30 @@ public class WorkService extends Service {
 				DBDao db = DBImpl.getInstance();
 				db.insertLocation(loc);
 				AppLog.d(TAG, "insertIntoLocation: <" + loc.addr + ">");
+				// AppLog.d(TAG, "insertIntoLocation: <" + sb.toString() + ">");
+				
+				if(Utility.isConnected(WorkService.this)){
+					SentryApplication.getApp().startUploadLocation(WorkService.this);
+				}
 			}else {
 				AppLog.d(TAG, "request location FAILED!!");
 			}
 			
 			if(mClient.isStarted()){
+				AppLog.d(TAG, "Client STOP");
 				mClient.stop();
 			}
+			
 		}
 	}
 	
-	private String getLatestFromServer(){
-		String latest = NetUtil.doGet(Common.URL_LOCATION_LATEST, null);
-		if(TextUtils.isEmpty(latest)){
-			latest = "2015-01-01 01:00:00";
-		}
-		return latest;
-	}
+//	private String getLatestFromServer(){
+//		String latest = NetUtil.doGet(Common.URL_LOCATION_LATEST, null);
+//		if(TextUtils.isEmpty(latest)){
+//			latest = "2015-01-01 01:00:00";
+//		}
+//		return latest;
+//	}
 	private String getLatestFromLocal(){
 		DBDao db = DBImpl.getInstance();
 		String latest = db.getLatestTime();
@@ -177,10 +184,10 @@ public class WorkService extends Service {
 		WebResult result = WebResult.parseByJson(responce);
 		return result != null && result.success;
 	}
-	private boolean upload(){
-		String serverLatest = getLatestFromServer();
-		ArrayList<SLocation> locations = DBImpl.getInstance().getLocations(serverLatest);
-		AppLog.d(TAG, "size is " + locations.size() + ", Since Sever " + serverLatest);
+	private boolean upload(String sinceTime){
+		ArrayList<SLocation> locations = DBImpl.getInstance().getLocations(sinceTime);
+//		String serverLatest = getLatestFromServer();
+//		AppLog.d(TAG, "size is " + locations.size() + ", Since Sever " + serverLatest);
 		boolean success = false;
 		if(locations != null && locations.size() > 0){
 			success = uploadLocations(locations);
@@ -210,7 +217,8 @@ public class WorkService extends Service {
 		@Override
 		protected Boolean doInBackground(Void... params) {
 			// TODO Auto-generated method stub
-			return upload();
+			String lastUpload = SentryApplication.getApp().getLastUploadTime();
+			return upload(lastUpload);
 		}
 		
 		@Override
@@ -218,10 +226,10 @@ public class WorkService extends Service {
 			// TODO Auto-generated method stub
 			if(result){
 				String lastest = getLatestFromLocal();
-				SentryApplication.getApp().setPreString(KEY_LOCATION_UPLOAD_TIME, lastest);
+				SentryApplication.getApp().setLastUploadTime(lastest);
 			}
 		}
 		
 	}
-
+	
 }

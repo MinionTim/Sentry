@@ -22,7 +22,7 @@ public class LocationActivity extends Activity{
 	    PendingIntent sender = PendingIntent.getService(LocationActivity.this, 0, intent, 0);
 	    AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
 	    am.cancel(sender);
-	    am.setRepeating(AlarmManager.RTC, System.currentTimeMillis() + 2000, 10 * 1000, sender);
+	    am.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 2000, 2 * 60 * 1000, sender);
 	    AppLog.d(TAG, "AlarmManager setRepeating");
 	}
 	
@@ -30,11 +30,11 @@ public class LocationActivity extends Activity{
 	protected void onDestroy() {
 		// TODO Auto-generated method stub
 		super.onDestroy();
-		Intent intent = new Intent(LocationActivity.this, WorkService.class);
-		intent.setAction(WorkService.ACTION_LOCATION_REQ);
-	    PendingIntent sender = PendingIntent.getService(LocationActivity.this, 0, intent, 0);
-	    AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
-	    am.cancel(sender);
+//		Intent intent = new Intent(LocationActivity.this, WorkService.class);
+//		intent.setAction(WorkService.ACTION_LOCATION_REQ);
+//	    PendingIntent sender = PendingIntent.getService(LocationActivity.this, 0, intent, 0);
+//	    AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
+//	    am.cancel(sender);
 	}
 
 	
