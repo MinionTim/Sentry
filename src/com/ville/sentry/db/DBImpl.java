@@ -32,6 +32,7 @@ public class DBImpl implements DBDao {
 		}
 		return mInstance;
 	}
+	
 	@Override
 	public boolean insertLocation(SLocation loc) {
 		// TODO Auto-generated method stub
@@ -55,6 +56,7 @@ public class DBImpl implements DBDao {
 		
 		db.execSQL(sql, new Object[]{loc.time, loc.addr, loc.city, loc.latitude,
 				loc.longitude, loc.locType, loc.province, loc.radius});
+		db.close();
 		return true;
 	}
 	@Override
@@ -107,11 +109,15 @@ public class DBImpl implements DBDao {
 		String[] columns = new String[]{TableLocation.TIME};
 		Cursor cursor = db.query(Tables.TABLE_LOCATION, columns, null, 
 				null, null, null, orderBy, limit);
+		String latest = null;
 		if(cursor.getCount() == 1 && cursor.moveToNext()){
-			return cursor.getString(cursor.getColumnIndex(TableLocation.TIME));
+			latest =  cursor.getString(cursor.getColumnIndex(TableLocation.TIME));
 		}
-		return null;
+		cursor.close();
+		db.close();
+		return latest;
 	}
+	
 	@Override
 	public ArrayList<SLocation> getLocations(String sinceTime) {
 		// TODO Auto-generated method stub
@@ -146,6 +152,7 @@ public class DBImpl implements DBDao {
             loc.radius = cursor.getDouble(cursor.getColumnIndex(TableLocation.RADIUS));
             list.add(loc);
         }
+        cursor.close();
         db.close();
 		return list;
 	}

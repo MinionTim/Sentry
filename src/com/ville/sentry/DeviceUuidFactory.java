@@ -25,8 +25,7 @@ public class DeviceUuidFactory {
 						uuid = UUID.fromString(id);
 					} else {
 						final String androidId = Secure
-								.getString(context.getContentResolver(),
-										Secure.ANDROID_ID);
+								.getString(context.getContentResolver(), Secure.ANDROID_ID);
 						// Use the Android ID unless it's broken, in which case
 						// fallback on deviceId,
 						// unless it's not available, then fallback on a random

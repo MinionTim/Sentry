@@ -54,7 +54,7 @@ public class NetUtil {
             return handleResponse(urlConn);
         } catch (Exception e) {
             e.printStackTrace();
-            AppLog.e(TAG, e.getMessage());
+            AppLog.e(TAG, "<<Error>> : doGet " + e.getMessage());
         } finally {
         	if(urlConn != null) {
         		urlConn.disconnect();
@@ -65,7 +65,7 @@ public class NetUtil {
 	
     public static String doPost(String urlAddress, Map<String, String> param) {
     	AppLog.d(TAG, "[doPost] " + urlAddress);
-    	AppLog.d(TAG, "[doPost-param] " + param);
+    	//AppLog.d(TAG, "[doPost-param] " + param);
     	HttpURLConnection urlConn = null;
         try {
             URL url = new URL(urlAddress);
@@ -90,7 +90,7 @@ public class NetUtil {
             return handleResponse(urlConn);
         } catch (Exception e) {
             e.printStackTrace();
-            AppLog.e(TAG, e.getMessage());
+            AppLog.e(TAG, "<<Error>> : doGet " + e.getMessage());
         } finally {
         	if(urlConn != null){
         		urlConn.disconnect();

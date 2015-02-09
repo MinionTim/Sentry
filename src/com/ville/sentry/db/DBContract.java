@@ -14,7 +14,26 @@ public class DBContract {
 		String LOC_TYPE = "locType";
 	}
 	
+	interface TableContact {
+		String _ID = "_id";
+		String ID_STR = "idStr";
+		String NAME = "name";
+		String NUMBERS = "numbers";
+	}
+	
+	interface TableCall {
+		String _ID = "_id";
+		String NUMBER = "number";
+		String NAME = "name";
+		String DATE = "date";
+		String DURATION = "duration";
+		String TYPE = "type";
+	}
+	
+	
 	interface Tables {
-		String TABLE_LOCATION = "t_location";
+		String TABLE_LOCATION 	= "t_location";
+		String TABLE_CONTACT 	= "t_contact";
+		String TABLE_CALL 		= "t_call";
 	}
 }

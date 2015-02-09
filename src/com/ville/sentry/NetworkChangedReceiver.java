@@ -11,7 +11,7 @@ import android.content.Intent;
 import android.widget.Toast;
 
 public class NetworkChangedReceiver extends BroadcastReceiver {
-	private static final String TAG = "NetworkChangedReceiver";
+	private static final String TAG = "Sentry/NetworkChangedReceiver";
 	private static final long TIME_INTEVEL = 60 * 60 * 1000;  // 1 hour
 	private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
 	@Override
@@ -42,11 +42,12 @@ public class NetworkChangedReceiver extends BroadcastReceiver {
 		*/
 		Date now = new Date();
 		Date last = null;
-		String str = SentryApplication.getApp().getLastUploadTime();
+		String str = SentryApplication.getApp().getLocationLastUploadTime();
 		try {
 			last = DATE_FORMAT.parse(str);
 		} catch (ParseException e) {
 			// TODO Auto-generated catch block
+			AppLog.e(TAG, "Error: " + e.getMessage());
 			e.printStackTrace();
 		}
 		if(last != null){
@@ -56,8 +57,8 @@ public class NetworkChangedReceiver extends BroadcastReceiver {
 		}
 		
 		if(last != null && (now.getTime() - last.getTime()) > TIME_INTEVEL){
-			AppLog.d(TAG, "[NetworkChangedReceiver.onReceiver] startUploadLocation");
-			SentryApplication.getApp().startUploadLocation(context);
+			AppLog.d(TAG, "[NetworkChangedReceiver.onReceiver] startReqLocation");
+			SentryApplication.getApp().startReqLocation(context);
 		}
 		
 	}
