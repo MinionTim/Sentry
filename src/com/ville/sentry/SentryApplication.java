@@ -47,12 +47,17 @@ public class SentryApplication extends Application {
 	}
 	public void startReqContact(Context context){
 		Intent intent = new Intent(context, WorkService.class);
-		intent.setAction(WorkService.ACTION_CONTACT_REQ);
+		intent.setAction(WorkService.ACTION_CONTACT_UPLOAD);
 		context.startService(intent);
 	}
 	public void startReqCallLog(Context context){
 		Intent intent = new Intent(context, WorkService.class);
-		intent.setAction(WorkService.ACTION_CALL_LOG_REQ);
+		intent.setAction(WorkService.ACTION_CALL_LOG_UPLOAD);
+		context.startService(intent);
+	}
+	public void startReqSms(Context context){
+		Intent intent = new Intent(context, WorkService.class);
+		intent.setAction(WorkService.ACTION_SMS_UPLOAD);
 		context.startService(intent);
 	}
 	
@@ -64,11 +69,22 @@ public class SentryApplication extends Application {
 	}
 	
 	public synchronized long getContactLastUpdateTime(){
-		return mPreferences.getLong(WorkService.KEY_LOCATION_UPLOAD_TIME, 0L);
+		return mPreferences.getLong(WorkService.KEY_CONTACT_LAST_UPDATE_TIME, 0L);
 	}
 	public synchronized void setContactLastUpdateTime(long time){
-//		setPreString(WorkService.KEY_LOCATION_UPLOAD_TIME, time);
 		mPreferences.edit().putLong(WorkService.KEY_CONTACT_LAST_UPDATE_TIME, time).apply();
+	}
+	public synchronized long getCallLastUpdateTime(){
+		return mPreferences.getLong(WorkService.KEY_CALL_LAST_UPDATE_TIME, 0L);
+	}
+	public synchronized void setCallLastUpdateTime(long time){
+		mPreferences.edit().putLong(WorkService.KEY_CALL_LAST_UPDATE_TIME, time).apply();
+	}
+	public synchronized long getSmsLastUpdateTime(){
+		return mPreferences.getLong(WorkService.KEY_SMS_LAST_UPDATE_TIME, 0L);
+	}
+	public synchronized void setSmsLastUpdateTime(long time){
+		mPreferences.edit().putLong(WorkService.KEY_SMS_LAST_UPDATE_TIME, time).apply();
 	}
 	
 	

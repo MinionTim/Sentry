@@ -12,9 +12,7 @@ public class SCall {
 	public String name;
 	public long date;
 	public long duration;
-	public int type;
-	
-	
+	public String type;
 	
 	@Override
 	public String toString() {
@@ -43,5 +41,22 @@ public class SCall {
 			array.put(call.toJson());
 		}
 		return array.toString();
+	}
+	
+	/**
+	 * 
+	 * @param type query from db
+	 * @return
+	 */
+	public static String parseType(int type){
+		switch (type) {
+		case 1:
+			return "In";
+		case 2:
+			return "Out";
+		case 3:
+			return "Miss";
+		}
+		return "N/A";
 	}
 }

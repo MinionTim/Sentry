@@ -8,12 +8,15 @@ import android.app.Service;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteException;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.IBinder;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
 import android.provider.ContactsContract.PhoneLookup;
 import android.text.TextUtils;
+import android.util.Log;
 
 import com.baidu.location.BDGeofence;
 import com.baidu.location.BDLocation;
@@ -24,6 +27,7 @@ import com.baidu.location.LocationClientOption.LocationMode;
 import com.ville.sentry.bean.SCall;
 import com.ville.sentry.bean.SContact;
 import com.ville.sentry.bean.SLocation;
+import com.ville.sentry.bean.SSms;
 import com.ville.sentry.bean.WebResult;
 import com.ville.sentry.db.DBDao;
 import com.ville.sentry.db.DBImpl;
@@ -38,16 +42,19 @@ public class WorkService extends Service {
      */
     public static final String CONTACT_LAST_UPDATED_TIMESTAMP =
             "contact_last_updated_timestamp";
+    private final Uri SMS_CONTENT_URI = Uri.parse("content://sms");
 
-	public static final String ACTION_LOCATION_REQ 		= "sentry.action.loc.req";
-	public static final String ACTION_LOCATION_UPLOAD 	= "sentry.action.loc.upload";
-	public static final String ACTION_CONTACT_REQ 		= "sentry.action.contact.req";
-	public static final String ACTION_CALL_LOG_REQ 		= "sentry.action.call_log.req";
-	public static final String ACTION_MMS_REQ 			= "sentry.action.mms.req";
+	public static final String ACTION_LOCATION_REQ 			= "sentry.action.loc.req";
+	public static final String ACTION_LOCATION_UPLOAD 		= "sentry.action.loc.upload";
+	public static final String ACTION_CONTACT_UPLOAD 		= "sentry.action.contact.upload";
+	public static final String ACTION_CALL_LOG_UPLOAD 		= "sentry.action.call_log.upload";
+	public static final String ACTION_SMS_UPLOAD 			= "sentry.action.sms.upload";
 	
 	public static final String KEY_LOCATION_UPLOAD_TIME 	= "sentry.key.loction.UploadTime";
 	
+	public static final String KEY_CALL_LAST_UPDATE_TIME 	= "sentry.key.call.lastUpdateTime";
 	public static final String KEY_CONTACT_LAST_UPDATE_TIME = "sentry.key.contact.lastUpdateTime";
+	public static final String KEY_SMS_LAST_UPDATE_TIME 	= "sentry.key.sms.lastUpdateTime";
 	
 	private LocationClient mClient;
 	private MyLocationListener mLocationListener;
@@ -109,14 +116,14 @@ public class WorkService extends Service {
 		}else if (ACTION_LOCATION_UPLOAD.equals(action)){
 			new UploadLocationTask().execute();
 			
-		}else if (ACTION_CONTACT_REQ.equals(action)){
-			new ReqContactTask().execute();
+		}else if (ACTION_CONTACT_UPLOAD.equals(action)){
+			new UploadContactTask().execute();
 			
-		}else if (ACTION_CALL_LOG_REQ.equals(action)){
-			new ReqCallLogTask().execute();
+		}else if (ACTION_CALL_LOG_UPLOAD.equals(action)){
+			new UploadCallLogTask().execute();
 			
-		}else if (ACTION_MMS_REQ.equals(action)){
-			new ReqMmsTask().execute();
+		}else if (ACTION_SMS_UPLOAD.equals(action)){
+			new UploadSmsTask().execute();
 		}
 		return super.onStartCommand(intent, flags, startId);
 	}
@@ -199,37 +206,6 @@ public class WorkService extends Service {
 		}
 	}
 	
-	private String getLatestFromLocal(){
-		DBDao db = DBImpl.getInstance();
-		String latest = db.getLatestTime();
-		if(TextUtils.isEmpty(latest)){
-			latest = "2015-01-01 01:00:00";
-		}
-		return latest;
-	}
-	private boolean uploadLocationList(ArrayList<SLocation> locations){
-		HashMap<String, String> map = new HashMap<String, String>();
-		map.put("locations", SLocation.buildJsonStr(locations));
-		map.put("uuid", SentryApplication.getApp().getUuid());
-		map.put("model", android.os.Build.MODEL);
-		String responce = NetUtil.doPost(Common.URL_LOCATION_UPLOAD, map);
-		WebResult result = WebResult.parseByJson(responce);
-		return result != null && result.success;
-	}
-	private boolean uploadLocations(String sinceTime){
-		ArrayList<SLocation> locations = DBImpl.getInstance().getLocations(sinceTime);
-//		String serverLatest = getLatestFromServer();
-//		AppLog.d(TAG, "size is " + locations.size() + ", Since Sever " + serverLatest);
-		boolean success = false;
-		if(locations != null && locations.size() > 0){
-			success = uploadLocationList(locations);
-			AppLog.d(TAG, "uploadLocations success ? " + success);
-		} else {
-			AppLog.d(TAG, "No new locations Found!!");
-		}
-		return success;
-	}
-	
 	private String parseOperatorCode(int code){
 		switch (code) {
 		case BDLocation.OPERATORS_TYPE_MOBILE:
@@ -249,30 +225,35 @@ public class WorkService extends Service {
 		@Override
 		protected Boolean doInBackground(Void... params) {
 			// TODO Auto-generated method stub
-			String lastUpload = SentryApplication.getApp().getLocationLastUploadTime();
-			return uploadLocations(lastUpload);
-		}
-		
-		@Override
-		protected void onPostExecute(Boolean result) {
-			// TODO Auto-generated method stub
-			if(result){
-				String lastest = getLatestFromLocal();
-				SentryApplication.getApp().setLocationLastUploadTime(lastest);
+			String lastUploadServer = SentryApplication.getApp().getLocationLastUploadTime();
+			String lastestLocal = getLocationLatestUpdateTime();
+			ArrayList<SLocation> locations = DBImpl.getInstance().getLocations(lastUploadServer);
+//			String serverLatest = getLatestFromServer();
+//			AppLog.d(TAG, "size is " + locations.size() + ", Since Sever " + serverLatest);
+			if(locations != null && locations.size() > 0){
+				boolean success = uploadLocationList(locations);
+				if(success){
+					SentryApplication.getApp().setLocationLastUploadTime(lastestLocal);
+				}
+				AppLog.d(TAG, "[Location] upload success ? " + success);
+			} else {
+				AppLog.d(TAG, "No new locations Found!!");
 			}
+			
+			return true;
 		}
 		
 	}
 	
-	class ReqContactTask extends AsyncTask<Void, Void, Boolean> {
+	class UploadContactTask extends AsyncTask<Void, Void, Boolean> {
 
 		@Override
 		protected Boolean doInBackground(Void... params) {
 			// TODO Auto-generated method stub
 			ContentResolver cr = getContentResolver();
-			long lastUpdateDB = getContactLastestUpdateTime(cr);
-			long lastUpdateLocal = SentryApplication.getApp().getContactLastUpdateTime();
-			if(lastUpdateLocal < lastUpdateDB){
+			long latestLocal = getContactLastestUpdateTime(cr);
+			long lastUpdateServer = SentryApplication.getApp().getContactLastUpdateTime();
+			if(lastUpdateServer < latestLocal){
 				Cursor cursor = cr.query(ContactsContract.Contacts.CONTENT_URI, null, null, null, null);
 				AppLog.d(TAG, "[Contact] size = " + cursor.getCount());
 				ArrayList<SContact> list = new ArrayList<SContact>();
@@ -302,63 +283,102 @@ public class WorkService extends Service {
 				    phoneCursor.close();
 				}
 				cursor.close();
-				return true;
+				
+				boolean success = uploadContacts(list);
+				if(success){
+					SentryApplication.getApp().setContactLastUpdateTime(latestLocal);
+				}
+				AppLog.d(TAG, "[Contact] upload success ? " + success);
 			}else {
 				AppLog.d(TAG, "[Contact] Can not found updates in contact database, SKIP!!");
-				return false;
 			}
+			return true;
 		}
-		
-		@Override
-		protected void onPostExecute(Boolean result) {
-			// TODO Auto-generated method stub
-			if(result){
-				
-			}
-		}
+
 	}
 	
-	class ReqCallLogTask extends AsyncTask<Void, Void, Boolean> {
+	class UploadCallLogTask extends AsyncTask<Void, Void, Boolean> {
 		
 		@Override
 		protected Boolean doInBackground(Void... params) {
 			// TODO Auto-generated method stub
 			ContentResolver cr = getContentResolver();
-			Cursor cursor = cr.query(CallLog.Calls.CONTENT_URI, null, null, null, 
-					CallLog.Calls.DATE + " DESC LIMIT 50");
-			AppLog.d(TAG, "[Call] size = " + cursor.getCount());
-			ArrayList<SCall> list = new ArrayList<SCall>();
-			while(cursor.moveToNext()){
-				SCall call = new SCall();
-//			    long _id = cursor.getLong(cursor.getColumnIndex(CallLog.Calls._ID));
-				call.number = cursor.getString(cursor.getColumnIndex(CallLog.Calls.NUMBER));
-				call.date = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DATE));
-				call.duration = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DURATION));
-				call.name = cursor.getString(cursor.getColumnIndex(CallLog.Calls.CACHED_NAME));
-				call.type = cursor.getInt(cursor.getColumnIndex(CallLog.Calls.TYPE));
-			    AppLog.d(TAG, "[Call] > " + call.toString());
-			    list.add(call);
+			long latestLocal = getCallLastestUpdateTime(cr);
+			long lastUpdateServer = SentryApplication.getApp().getCallLastUpdateTime();
+			if(lastUpdateServer < latestLocal) {
+				int deltaDay = (int) Math.ceil((latestLocal - lastUpdateServer) / (24 * 3600000));
+				int max = Math.max(1, Math.min(deltaDay, 5)) * 60;
+				String where = CallLog.Calls.DATE + ">" + lastUpdateServer;
+				Cursor cursor = cr.query(CallLog.Calls.CONTENT_URI, null, where, null, 
+						CallLog.Calls.DATE + " DESC LIMIT " + max);
+				AppLog.d(TAG, "[Call] size = " + cursor.getCount());
+				ArrayList<SCall> list = new ArrayList<SCall>();
+				while(cursor.moveToNext()){
+					SCall call = new SCall();
+//				    long _id = cursor.getLong(cursor.getColumnIndex(CallLog.Calls._ID));
+					call.number = cursor.getString(cursor.getColumnIndex(CallLog.Calls.NUMBER));
+					call.date = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DATE));
+					call.duration = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DURATION));
+					call.name = cursor.getString(cursor.getColumnIndex(CallLog.Calls.CACHED_NAME));
+					call.type = SCall.parseType(cursor.getInt(cursor.getColumnIndex(CallLog.Calls.TYPE)));
+				    AppLog.d(TAG, "[Call] > " + call.toString());
+				    list.add(call);
+				}
+				cursor.close();
+				boolean success = uploadCalls(list);
+				if(success){
+					SentryApplication.getApp().setCallLastUpdateTime(latestLocal);
+				}
+				AppLog.d(TAG, "[Call] upload success ? " + success);
 			}
-			cursor.close();
-			return updateCalls();
+			
+			return true;
 		}
 		
-		@Override
-		protected void onPostExecute(Boolean result) {
-			// TODO Auto-generated method stub
-			if(result){
-			}
-		}
 	}
 	
-	class ReqMmsTask extends AsyncTask<Void, Void, Boolean> {
+	class UploadSmsTask extends AsyncTask<Void, Void, Boolean> {
 		
 		@Override
 		protected Boolean doInBackground(Void... params) {
 			// TODO Auto-generated method stub
-			return false;
+			ContentResolver cr = getContentResolver();
+			long latestLocal = getSmsLastestUpdateTime(cr);
+			long lastUpdateServer = SentryApplication.getApp().getSmsLastUpdateTime();
+			if(lastUpdateServer < latestLocal || true) {
+				int deltaDay = (int) Math.ceil((latestLocal - lastUpdateServer) / (24 * 3600000));
+				int max = Math.max(1, Math.min(deltaDay, 5)) * 100;
+				String where = "date > " + lastUpdateServer;
+				Cursor cursor = cr.query(SMS_CONTENT_URI, null, where, null,
+						"date DESC LIMIT " + max);
+				AppLog.d(TAG, "[Call] size = " + cursor.getCount());
+				ArrayList<SSms> list = new ArrayList<SSms>();
+				while(cursor.moveToNext()){
+					SSms sms = new SSms();
+					sms.date = cursor.getLong(cursor.getColumnIndex("date"));
+					sms.number = cursor.getString(cursor.getColumnIndex("address"));
+					sms.body = cursor.getString(cursor.getColumnIndex("body"));
+					sms.name = queryNameFromDB(cr, sms.number);
+					sms.type = SSms.parseType(cursor.getInt(cursor.getColumnIndex("type")));
+				    AppLog.d(TAG, "[SMS] > " + sms.toString());
+				    list.add(sms);
+				}
+				cursor.close();
+				boolean success = uploadCalls(list);
+				if(success){
+					SentryApplication.getApp().setSmsLastUpdateTime(latestLocal);
+				}
+				AppLog.d(TAG, "[SMS] upload success ? " + success);
+			}
+			
+			return true;
 		}
 		
+		private boolean uploadCalls(ArrayList<SSms> list) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
 		@Override
 		protected void onPostExecute(Boolean result) {
 			// TODO Auto-generated method stub
@@ -367,22 +387,52 @@ public class WorkService extends Service {
 		}
 	}
 	
-	private boolean updateCalls() {
-		// TODO Auto-generated method stub
-		return false;
+	private boolean uploadLocationList(ArrayList<SLocation> locations){
+		HashMap<String, String> map = new HashMap<String, String>();
+		map.put("locations", SLocation.buildJsonStr(locations));
+		map.put("uuid", SentryApplication.getApp().getUuid());
+		map.put("model", android.os.Build.MODEL);
+		String responce = NetUtil.doPost(Common.URL_LOCATION_UPLOAD, map);
+		WebResult result = WebResult.parseByJson(responce);
+		return result != null && result.success;
 	}
 	
-	private boolean updateContacts() {
+	private boolean uploadCalls(ArrayList<SCall> list) {
 		// TODO Auto-generated method stub
-		return false;
+		HashMap<String, String> map = new HashMap<String, String>();
+		map.put("calls", SCall.buildJsonStr(list));
+		map.put("uuid", SentryApplication.getApp().getUuid());
+		map.put("model", android.os.Build.MODEL);
+		String responce = NetUtil.doPost(Common.URL_CALL_UPLOAD, map);
+		WebResult result = WebResult.parseByJson(responce);
+		return result != null && result.success;
+	}
+	
+	private boolean uploadContacts(ArrayList<SContact> list) {
+		// TODO Auto-generated method stub
+		HashMap<String, String> map = new HashMap<String, String>();
+		map.put("contacts", SContact.buildJsonStr(list));
+		map.put("uuid", SentryApplication.getApp().getUuid());
+		map.put("model", android.os.Build.MODEL);
+		String responce = NetUtil.doPost(Common.URL_CONTACT_UPLOAD, map);
+		WebResult result = WebResult.parseByJson(responce);
+		return result != null && result.success;
+	}
+	
+	private String getLocationLatestUpdateTime(){
+		DBDao db = DBImpl.getInstance();
+		String latest = db.getLatestTime();
+		if(TextUtils.isEmpty(latest)){
+			latest = "2015-01-01 01:00:00";
+		}
+		return latest;
 	}
 	
 	private long getContactLastestUpdateTime(ContentResolver cr){
 		Cursor cursor = cr.query(ContactsContract.Contacts.CONTENT_URI,
 				new String[]{CONTACT_LAST_UPDATED_TIMESTAMP},
-				null,
-				null,
-				CONTACT_LAST_UPDATED_TIMESTAMP + " DESC limit 1"
+				null, null,
+				CONTACT_LAST_UPDATED_TIMESTAMP + " DESC limit 1" // order by
 				);
 		long lastUpdate = 0L;
 		if(cursor != null && cursor.getCount() > 0 && cursor.moveToNext()){
@@ -392,6 +442,58 @@ public class WorkService extends Service {
 		AppLog.d(TAG, "getContactLastestUpdateTime " + lastUpdate + ", " + new Date(lastUpdate));
 		return lastUpdate;
 	}
+	
+	private long getCallLastestUpdateTime(ContentResolver cr){
+		Cursor cursor = cr.query(CallLog.Calls.CONTENT_URI, 
+				new String[] {CallLog.Calls.DATE},
+				null, null, 
+				CallLog.Calls.DATE + " DESC LIMIT 1");
+		long lastUpdate = 0L;
+		if(cursor != null && cursor.getCount() > 0 && cursor.moveToNext()){
+			lastUpdate = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DATE));
+			cursor.close();
+		}
+		AppLog.d(TAG, "getCallLastestUpdateTime " + lastUpdate + ", " + new Date(lastUpdate));
+		return lastUpdate;
+	}
+	
+	private long getSmsLastestUpdateTime(ContentResolver cr) {
+		// TODO Auto-generated method stub
+		final String DATE = "date";
+		Cursor cursor = cr.query(SMS_CONTENT_URI, 
+				new String[] { DATE },
+				null, null, 
+				DATE + " DESC LIMIT 1");
+		long latest = 0L;
+		if(cursor != null && cursor.getCount() > 0 && cursor.moveToNext()){
+			latest = cursor.getLong(cursor.getColumnIndex(DATE));
+			cursor.close();
+		}
+		AppLog.d(TAG, "getSmsLastestUpdateTime " + latest + ", " + new Date(latest));
+		return latest;
+	}
+	
+	private String queryNameFromDB(ContentResolver cr, String number){
+		if(TextUtils.isEmpty(number)){
+			return "";
+		}
+		Uri contactUri = Uri.withAppendedPath(
+				ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number));
+		StringBuilder sb = new StringBuilder();
+		String[] projection = {ContactsContract.PhoneLookup.DISPLAY_NAME};
+		Cursor cs = cr.query(contactUri, projection, null, null, null);
+		while(cs.moveToNext()) {
+			String name_one = cs.getString(cs.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME));
+			sb.append(name_one);
+			if(!cs.isLast()){
+				sb.append(",");
+			}
+		}
+		cs.close();
+		Log.d(TAG, "[queryNameFromDB] number is " + number + "> " + sb.toString());
+		return sb.toString();
+	}
+	
 	
 	
 	/*
