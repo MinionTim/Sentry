@@ -87,6 +87,13 @@ public class SentryApplication extends Application {
 		mPreferences.edit().putLong(WorkService.KEY_SMS_LAST_UPDATE_TIME, time).apply();
 	}
 	
+	public synchronized String getMobileInfos(){
+		return mPreferences.getString(WorkService.KEY_MOBILE_INFO, "");
+	}
+	public synchronized void setMobileInfos(String infos){
+		mPreferences.edit().putString(WorkService.KEY_MOBILE_INFO, infos).apply();
+	}
+	
 	
 	
 }

