@@ -10,13 +10,13 @@ public class SCall {
 	
 	public String number;
 	public String name;
-	public long date;
+	public long _date;
 	public long duration;
 	public String type;
 	
 	@Override
 	public String toString() {
-		return "SCall [number=" + number + ", name=" + name + ", date=" + date
+		return "SCall [number=" + number + ", name=" + name + ", _date=" + _date
 				+ ", duration=" + duration + ", type=" + type + "]";
 	}
 
@@ -25,7 +25,7 @@ public class SCall {
 		try {
 			jObj.put("number", number);
 			jObj.put("name", name);
-			jObj.put("date", date);
+			jObj.put("_date", _date);
 			jObj.put("duration", duration);
 			jObj.put("type", type);
 		} catch (JSONException e) {

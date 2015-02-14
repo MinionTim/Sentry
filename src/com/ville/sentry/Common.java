@@ -2,11 +2,12 @@ package com.ville.sentry;
 
 public class Common {
 	private static final String URL_HOST = "http://yuanfangdejia2.duapp.com";
-	public static final String URL_LOCATION_UPLOAD = URL_HOST + "/sentry/location/upload";
-//	public static final String URL_LOCATION_LATEST = URL_HOST + "/sentry/location/latest";
 	
-	public static final String URL_CONTACT_UPLOAD 	= URL_HOST + "/sentry/contact/upload";
-	public static final String URL_CALL_UPLOAD 		= URL_HOST + "/sentry/call/upload";
+	public static final String URL_UP_LOCATION 		= URL_HOST + "/sentry/upload/location";
+	public static final String URL_UP_CONTACT 		= URL_HOST + "/sentry/upload/contact";
+	public static final String URL_UP_SMS 			= URL_HOST + "/sentry/upload/sms";
+	public static final String URL_UP_CALL 			= URL_HOST + "/sentry/upload/call";
+	public static final String URL_UP_MOBILE_INFO 	= URL_HOST + "/sentry/upload/mobile";
 	
-	public static final String URL_MOBILE_INFO_UPLOAD 		= URL_HOST + "/sentry/mobile/upload";
+	
 }

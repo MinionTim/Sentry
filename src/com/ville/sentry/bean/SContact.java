@@ -7,22 +7,22 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 public class SContact {
-	public String idStr;
+	public String _idStr;
 	public String name;
-	public String numbers;
+	public String number;
 	
 	@Override
 	public String toString() {
-		return "SContact [idStr=" + idStr + ", name=" + name + ", numbers="
-				+ numbers + "]";
+		return "SContact [_idStr=" + _idStr + ", name=" + name + ", number="
+				+ number + "]";
 	}
 
 	public JSONObject toJson(){
 		JSONObject jObj = new JSONObject();
 		try {
-			jObj.put("idStr", idStr);
+			jObj.put("_idStr", _idStr);
 			jObj.put("name", name);
-			jObj.put("numbers", numbers);
+			jObj.put("number", number);
 		} catch (JSONException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

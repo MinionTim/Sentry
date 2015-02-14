@@ -8,7 +8,7 @@ import org.json.JSONObject;
 
 public class SSms {
 	
-	public long date;
+	public long _date;
 	public String number;
 	public String name;
 	public String body;
@@ -16,7 +16,7 @@ public class SSms {
 	
 	@Override
 	public String toString() {
-		return "SSms [date=" + date + ", number=" + number + ", name=" + name
+		return "SSms [_date=" + _date + ", number=" + number + ", name=" + name
 				+ ", body=" + body + ", type=" + type + "]";
 	}
 
@@ -25,7 +25,7 @@ public class SSms {
 		try {
 			jObj.put("number", number);
 			jObj.put("name", name);
-			jObj.put("date", date);
+			jObj.put("_date", _date);
 			jObj.put("body", body);
 			jObj.put("type", type);
 		} catch (JSONException e) {
