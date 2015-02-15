@@ -245,7 +245,6 @@ public class NetUtil {
     public boolean doUploadFile(String urlStr, Map<String, String> param, String path, 
     		String imageParamName/*, final FileUploaderHttpHelper.ProgressListener listener*/){
         String BOUNDARYSTR = getBoundry();
-
         File targetFile = new File(path);
 
         byte[] barry = null;
@@ -258,7 +257,8 @@ public class NetUtil {
             contentLength = sendStr.getBytes("UTF-8").length + (int) targetFile.length() + 2 * barry.length;
         } catch (UnsupportedEncodingException e) {
         }
-        int totalSent = 0;
+        @SuppressWarnings("unused")
+		int totalSent = 0;
         String lenstr = Integer.toString(contentLength);
 
         HttpURLConnection urlConnection = null;

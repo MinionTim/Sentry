@@ -5,8 +5,8 @@ import java.util.ArrayList;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
-import android.util.Log;
 
+import com.ville.sentry.AppLog;
 import com.ville.sentry.bean.SLocation;
 import com.ville.sentry.db.DBContract.TableLocation;
 import com.ville.sentry.db.DBContract.Tables;
@@ -28,7 +28,7 @@ public class DBImpl implements DBDao {
 	}
 	public synchronized static DBImpl getInstance(){
 		if(mInstance == null){
-			Log.e(TAG, "You Have to INIT first!!");
+			AppLog.e(TAG, "You Have to INIT first!!");
 		}
 		return mInstance;
 	}

@@ -4,7 +4,7 @@ import android.util.Log;
 
 public class AppLog {
 	
-	private static final boolean DEUBG = true;
+	private static final boolean DEUBG = false;
 	
 	public static void i(String tag, String msg){
 		if(DEUBG) Log.i(tag, msg);

