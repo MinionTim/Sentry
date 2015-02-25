@@ -108,6 +108,9 @@ public class WorkService extends Service {
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		// TODO Auto-generated method stub
+		if(intent == null){
+			return START_STICKY;
+		}
 		AppLog.d(TAG, "[onStartCommand] " + new Date() + ", " + intent.getAction());
 		ensureMobileInfoUpload();
 		String action = intent.getAction();
